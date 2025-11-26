@@ -2,8 +2,3 @@ config:
   - name: dc898828-aedf-4928-8778-e1015014967c
   - name: 0a8f85f4-821a-4346-9d03-62d8e056534a
   - name: ab3c43a8-fd03-410c-87e1-819bc236b3d4
-  - name: f9d0de0e-4431-4005-b642-05ef8b3cf3cf
-  - name: b9de8d3f-bf47-4ed2-b7a4-3b4a451bb06f
-  - name: 22cbabd3-1bf4-4671-a9c8-0fedef1e789e # comment
-  - name: 706882da-ec81-4c51-9bca-10f13c1b51b4
-  - name: d3a62727-ff5d-4a53-9243-735488b7cbba
