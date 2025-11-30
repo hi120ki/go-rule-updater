@@ -22,6 +22,18 @@ type GitHub struct {
 }
 
 func NewClient(ctx context.Context, cfg *env.Env) (*GitHub, error) {
+	httpClient, err := newHttpClient(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http client: %w", err)
+	}
+
+	return &GitHub{
+		client:   github.NewClient(httpClient),
+		clientV4: githubv4.NewClient(httpClient),
+	}, nil
+}
+
+func newHttpClient(ctx context.Context, cfg *env.Env) (*http.Client, error) {
 	if cfg.GitHubAppKMSKeyPath != "" {
 		kmsClient, err := kms.NewKeyManagementClient(ctx)
 		if err != nil {
@@ -40,11 +52,7 @@ func NewClient(ctx context.Context, cfg *env.Env) (*GitHub, error) {
 
 		itr := ghinstallation.NewFromAppsTransport(atr, cfg.GitHubAppInstallationID)
 
-		itrClient := &http.Client{Transport: itr, Timeout: 5 * time.Second}
-		return &GitHub{
-			client:   github.NewClient(itrClient),
-			clientV4: githubv4.NewClient(itrClient),
-		}, nil
+		return &http.Client{Transport: itr, Timeout: 5 * time.Second}, nil
 	}
 
 	if cfg.GitHubAppPrivateKey != "" {
@@ -52,23 +60,15 @@ func NewClient(ctx context.Context, cfg *env.Env) (*GitHub, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ghinstallation transport: %w", err)
 		}
-		itrClient := &http.Client{Transport: itr, Timeout: 5 * time.Second}
-		return &GitHub{
-			client:   github.NewClient(itrClient),
-			clientV4: githubv4.NewClient(itrClient),
-		}, nil
+		return &http.Client{Transport: itr, Timeout: 5 * time.Second}, nil
 	}
 
 	if cfg.GitHubToken != "" {
-		itrClient := oauth2.NewClient(
+		return oauth2.NewClient(
 			ctx, oauth2.StaticTokenSource(
 				&oauth2.Token{AccessToken: cfg.GitHubToken},
 			),
-		)
-		return &GitHub{
-			client:   github.NewClient(itrClient),
-			clientV4: githubv4.NewClient(itrClient),
-		}, nil
+		), nil
 	}
 
 	return nil, fmt.Errorf("no GitHub authentication method provided")
