@@ -8,7 +8,9 @@ go-rule-updater is a small automation tool that appends a new rule to `rule.yaml
 2. Create a new branch from `BASE_BRANCH`.
 3. Read the target `rule.yaml` (or any path set in `RULE_PATH`).
 4. Append a UUID-based rule entry while preserving existing YAML comments.
-5. Commit, open a PR with a comment, then merge the PR.
+5. Commit, open a PR with a comment.
+6. **Automatically detect and update any existing conflicting PRs** by rebasing them with the latest base branch.
+7. (Optional) Merge the PR automatically (currently commented out).
 
 ## Requirements
 

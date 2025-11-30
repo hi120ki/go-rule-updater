@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hi120ki/go-rule-updater/env"
 	ghclient "github.com/hi120ki/go-rule-updater/github"
-	"github.com/hi120ki/go-rule-updater/rule"
+	"github.com/hi120ki/go-rule-updater/service"
 )
 
 func main() {
@@ -23,48 +23,18 @@ func main() {
 		log.Fatalf("Failed to initialize GitHub: %v", err)
 	}
 
-	new := uuid.New().String()
+	svc := service.NewService(cfg, gh)
 
-	if err := gh.CreateBranch(ctx, cfg.Owner, cfg.Repository, new, cfg.BaseBranch); err != nil {
-		log.Fatalf("Failed to create branch: %v", err)
-	}
-
-	content, err := gh.GetFile(ctx, cfg.Owner, cfg.Repository, cfg.RulePath, cfg.BaseBranch)
+	pr, err := svc.Add(ctx, uuid.New().String())
 	if err != nil {
-		log.Fatalf("Failed to get file: %v", err)
+		log.Fatalf("Failed to add new rule and create PR: %v", err)
 	}
 
-	newContent, err := rule.Add(content, new)
-	if err != nil {
-		log.Fatalf("Failed to add rule: %v", err)
-	}
-
-	sha, err := gh.GetLatestCommitSHA(ctx, cfg.Owner, cfg.Repository, cfg.BaseBranch)
-	if err != nil {
-		log.Fatalf("Failed to get latest commit SHA: %v", err)
-	}
-
-	if err := gh.CreateCommit(ctx, &ghclient.CreateCommitInput{
-		Owner:           cfg.Owner,
-		Repository:      cfg.Repository,
-		Branch:          new,
-		Message:         "Add new rule",
-		Additions:       []*ghclient.FileAdditionInput{{Path: cfg.RulePath, Content: newContent}},
-		ExpectedHeadOid: sha,
-	}); err != nil {
-		log.Fatalf("Failed to create commit: %v", err)
-	}
-
-	pr, err := gh.CreatePullRequest(ctx, cfg.Owner, cfg.Repository, "Add new rule", new, cfg.BaseBranch, "This PR adds a new rule.")
-	if err != nil {
-		log.Fatalf("Failed to create pull request: %v", err)
-	}
-
-	if err := gh.CreatePullRequestComment(ctx, cfg.Owner, cfg.Repository, pr.GetNumber(), "Automated PR created to add a new rule."); err != nil {
-		log.Fatalf("Failed to create pull request comment: %v", err)
-	}
-
-	if err := gh.MergePullRequest(ctx, cfg.Owner, cfg.Repository, pr.GetNumber()); err != nil {
+	if err := svc.Merge(ctx, pr.GetNumber()); err != nil {
 		log.Fatalf("Failed to merge pull request: %v", err)
+	}
+
+	if err := svc.UpdateConflictingPRs(ctx); err != nil {
+		log.Printf("Warning: Failed to update conflicting PRs: %v", err)
 	}
 }
