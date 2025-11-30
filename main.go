@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hi120ki/go-rule-updater/env"
@@ -30,9 +31,13 @@ func main() {
 		log.Fatalf("Failed to add new rule and create PR: %v", err)
 	}
 
+	time.Sleep(10 * time.Second)
+
 	if err := svc.Merge(ctx, pr.GetNumber()); err != nil {
 		log.Fatalf("Failed to merge pull request: %v", err)
 	}
+
+	time.Sleep(10 * time.Second)
 
 	if err := svc.UpdateConflictingPRs(ctx); err != nil {
 		log.Printf("Warning: Failed to update conflicting PRs: %v", err)
