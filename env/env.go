@@ -13,6 +13,8 @@ type Env struct {
 	Repository              string      `envconfig:"REPOSITORY" default:"go-rule-updater"`
 	RulePath                string      `envconfig:"RULE_PATH" default:"rule.yaml"`
 	BaseBranch              string      `envconfig:"BASE_BRANCH" default:"main"`
+	MergeMaxRetries         int         `envconfig:"MERGE_MAX_RETRIES" default:"6"`
+	MergeRetryDelaySeconds  int         `envconfig:"MERGE_RETRY_DELAY_SECONDS" default:"10"`
 	GitHubToken             string      `envconfig:"GITHUB_TOKEN"`
 	GitHubAppID             int64       `envconfig:"GITHUB_APP_ID"`
 	GitHubAppInstallationID int64       `envconfig:"GITHUB_APP_INSTALLATION_ID"`

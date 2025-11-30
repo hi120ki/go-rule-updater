@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/google/go-github/v79/github"
 	"github.com/hi120ki/go-rule-updater/env"
@@ -67,10 +68,30 @@ func (s *Service) Add(ctx context.Context, id string) (*github.PullRequest, erro
 }
 
 func (s *Service) Merge(ctx context.Context, prNumber int) error {
-	if err := s.gh.MergePullRequest(ctx, s.cfg.Owner, s.cfg.Repository, prNumber); err != nil {
-		return fmt.Errorf("failed to merge pull request: %w", err)
+	retryDelay := time.Duration(s.cfg.MergeRetryDelaySeconds) * time.Second
+
+	attempts := 0
+	for {
+		pr, err := s.gh.GetPullRequest(ctx, s.cfg.Owner, s.cfg.Repository, prNumber)
+		if err != nil {
+			return fmt.Errorf("failed to get pull request: %w", err)
+		}
+
+		if pr.GetMergeable() && pr.GetMergeableState() == "clean" {
+			if err := s.gh.MergePullRequest(ctx, s.cfg.Owner, s.cfg.Repository, prNumber); err != nil {
+				return fmt.Errorf("failed to merge pull request: %w", err)
+			}
+			return nil
+		}
+
+		attempts++
+		if attempts >= s.cfg.MergeMaxRetries {
+			return fmt.Errorf("PR #%d is not mergeable", prNumber)
+		}
+
+		log.Printf("PR #%d is not mergeable yet (mergeable: %v, state: %s)", prNumber, pr.GetMergeable(), pr.GetMergeableState())
+		time.Sleep(retryDelay)
 	}
-	return nil
 }
 
 func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
