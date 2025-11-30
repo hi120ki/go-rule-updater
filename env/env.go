@@ -14,8 +14,8 @@ type Env struct {
 	RulePath                string      `envconfig:"RULE_PATH" default:"rule.yaml"`
 	BaseBranch              string      `envconfig:"BASE_BRANCH" default:"main"`
 	GitHubToken             string      `envconfig:"GITHUB_TOKEN"`
-	GitHubAppID             int64       `envconfig:"GITHUB_APP_ID" `
-	GitHubAppInstallationID int64       `envconfig:"GITHUB_APP_INSTALLATION_ID" `
+	GitHubAppID             int64       `envconfig:"GITHUB_APP_ID"`
+	GitHubAppInstallationID int64       `envconfig:"GITHUB_APP_INSTALLATION_ID"`
 	GitHubAppKMSKeyPath     string      `envconfig:"GITHUB_APP_KMS_KEY_PATH"`
 	GitHubAppPrivateKey     string      `envconfig:"GITHUB_APP_PRIVATE_KEY"`
 }
