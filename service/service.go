@@ -25,7 +25,9 @@ func NewService(cfg *env.Env, gh *ghclient.GitHub) *Service {
 }
 
 func (s *Service) Add(ctx context.Context, id string) (*github.PullRequest, error) {
-	if err := s.gh.CreateBranch(ctx, s.cfg.Owner, s.cfg.Repository, id, s.cfg.BaseBranch); err != nil {
+	branch := fmt.Sprintf("add/%s", id)
+
+	if err := s.gh.CreateBranch(ctx, s.cfg.Owner, s.cfg.Repository, branch, s.cfg.BaseBranch); err != nil {
 		return nil, fmt.Errorf("failed to create branch: %w", err)
 	}
 
@@ -47,7 +49,7 @@ func (s *Service) Add(ctx context.Context, id string) (*github.PullRequest, erro
 	if err := s.gh.CreateCommit(ctx, &ghclient.CreateCommitInput{
 		Owner:           s.cfg.Owner,
 		Repository:      s.cfg.Repository,
-		Branch:          id,
+		Branch:          branch,
 		Message:         "Add new rule",
 		Additions:       []*ghclient.FileAdditionInput{{Path: s.cfg.RulePath, Content: newContent}},
 		ExpectedHeadOid: sha,
@@ -55,7 +57,7 @@ func (s *Service) Add(ctx context.Context, id string) (*github.PullRequest, erro
 		return nil, fmt.Errorf("failed to create commit: %w", err)
 	}
 
-	pr, err := s.gh.CreatePullRequest(ctx, s.cfg.Owner, s.cfg.Repository, "Add new rule", id, s.cfg.BaseBranch, "This PR adds a new rule.")
+	pr, err := s.gh.CreatePullRequest(ctx, s.cfg.Owner, s.cfg.Repository, "Add new rule", branch, s.cfg.BaseBranch, "This PR adds a new rule.")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pull request: %w", err)
 	}
@@ -167,13 +169,21 @@ func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
 				continue
 			}
 
-			// Reset PR branch to base branch
-			if err := s.gh.UpdateBranchRef(ctx, s.cfg.Owner, s.cfg.Repository, branchName, baseSHA, true); err != nil {
-				log.Printf("Failed to reset branch for PR #%d: %v", fullPR.GetNumber(), err)
+			// Create temporary branch from base
+			tempBranch := fmt.Sprintf("tmp/rebase/%d-%d", fullPR.GetNumber(), time.Now().Unix())
+			if err := s.gh.CreateBranch(ctx, s.cfg.Owner, s.cfg.Repository, tempBranch, s.cfg.BaseBranch); err != nil {
+				log.Printf("Failed to create temp branch for PR #%d: %v", fullPR.GetNumber(), err)
 				continue
 			}
 
-			// Get current rule file content (after reset)
+			// Cleanup temp branch on exit
+			defer func(branch string) {
+				if err := s.gh.DeleteBranch(ctx, s.cfg.Owner, s.cfg.Repository, branch); err != nil {
+					log.Printf("Failed to delete temp branch %s: %v", branch, err)
+				}
+			}(tempBranch)
+
+			// Get current rule file content from base
 			content, err := s.gh.GetFile(ctx, s.cfg.Owner, s.cfg.Repository, s.cfg.RulePath, s.cfg.BaseBranch)
 			if err != nil {
 				log.Printf("Failed to get rule file for PR #%d: %v", fullPR.GetNumber(), err)
@@ -189,16 +199,29 @@ func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
 				}
 			}
 
-			// Create new commit
+			// Create new commit on temp branch
 			if err := s.gh.CreateCommit(ctx, &ghclient.CreateCommitInput{
 				Owner:           s.cfg.Owner,
 				Repository:      s.cfg.Repository,
-				Branch:          branchName,
+				Branch:          tempBranch,
 				Message:         "Rebase: Add new rule",
 				Additions:       []*ghclient.FileAdditionInput{{Path: s.cfg.RulePath, Content: content}},
 				ExpectedHeadOid: baseSHA,
 			}); err != nil {
-				log.Printf("Failed to create rebased commit for PR #%d: %v", fullPR.GetNumber(), err)
+				log.Printf("Failed to create rebased commit on temp branch for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Get new commit SHA from temp branch
+			newSHA, err := s.gh.GetLatestCommitSHA(ctx, s.cfg.Owner, s.cfg.Repository, tempBranch)
+			if err != nil {
+				log.Printf("Failed to get temp branch SHA for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Atomically update PR branch to point to new commit (force push)
+			if err := s.gh.UpdateBranchRef(ctx, s.cfg.Owner, s.cfg.Repository, branchName, newSHA, true); err != nil {
+				log.Printf("Failed to update PR branch for PR #%d: %v", fullPR.GetNumber(), err)
 				continue
 			}
 

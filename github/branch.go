@@ -31,7 +31,7 @@ func (g *GitHub) CreateBranch(ctx context.Context, owner, repo, branchName, base
 
 // UpdateBranchRef updates a branch reference to point to a new SHA (force update)
 func (g *GitHub) UpdateBranchRef(ctx context.Context, owner, repo, branchName, sha string, force bool) error {
-	ref := "heads/" + branchName
+	ref := "refs/heads/" + branchName
 	updateRef := github.UpdateRef{
 		SHA:   sha,
 		Force: &force,
@@ -39,6 +39,16 @@ func (g *GitHub) UpdateBranchRef(ctx context.Context, owner, repo, branchName, s
 	_, _, err := g.client.Git.UpdateRef(ctx, owner, repo, ref, updateRef)
 	if err != nil {
 		return fmt.Errorf("failed to update branch %s to SHA %s: %w", branchName, sha, err)
+	}
+	return nil
+}
+
+// DeleteBranch deletes a branch
+func (g *GitHub) DeleteBranch(ctx context.Context, owner, repo, branchName string) error {
+	ref := "refs/heads/" + branchName
+	_, err := g.client.Git.DeleteRef(ctx, owner, repo, ref)
+	if err != nil {
+		return fmt.Errorf("failed to delete branch %s: %w", branchName, err)
 	}
 	return nil
 }
