@@ -1,40 +1,46 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Structure & Modules
 
-- `main.go`: CLI entrypoint that loads env vars, opens a GitHub client, creates a branch, updates the rule file, and opens/merges a PR.
-- `env/`: Environment loading via `envconfig`; defaults exist for `OWNER`, `REPOSITORY`, `RULE_PATH` (`rule.yaml`), and `BASE_BRANCH`.
-- `github/`: REST + GraphQL helpers for branches, commits, files, refs, and PR flows; paired `*_test.go` files show expected API interactions.
-- `rule/`: YAML manipulation that appends config entries while preserving comments using `goccy/go-yaml`; validated by table-driven tests.
-- `rule.yaml`: Default rule store; structure is a `config` array of `name` values and can be relocated by setting `RULE_PATH`.
+- `main.go`: entrypoint that wires environment, GitHub client, and service flow.
+- `service/service.go`: orchestration for branch creation, rule append, PR handling, and optional merge.
+- `env/`: configuration loading from environment variables for development vs production.
+- `github/`: REST/GraphQL helpers for branches, refs, commits, files, and PR operations.
+- `rule/`: YAML mutation while preserving comments; see `rule.yaml` as the default target file.
+- Tests live beside code in `*_test.go`; use `rule/rule_test.go` and `github/*_test.go` for examples.
+- Top-level `Makefile` contains repeatable commands; `.editorconfig` captures indentation rules.
 
 ## Build, Test, and Development Commands
 
-- `make run` (or `GITHUB_TOKEN=$(gh auth token) go run main.go`): Executes the end-to-end update flow against the configured repo.
-- `make test` (or `GITHUB_TOKEN=$(gh auth token) go test ./...`): Runs all unit tests; token is required because some tests hit GitHub APIs.
-- `go fmt ./... && go vet ./...`: Format and basic static analysis before opening a PR.
-- Production mode: set `ENVIRONMENT=production` and provide `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY`.
+- `make run`: execute the full flow locally using `GITHUB_TOKEN`/`gh auth token`.
+- `make test`: run Go tests; GitHub client initialization requires `GITHUB_TOKEN`.
+- `go test ./...`: standard test run (set GitHub-related env vars as needed).
+- `go fmt ./... && go vet ./...`: format and static checks; keep the repo clean before pushing.
+- `GITHUB_TOKEN=$(gh auth token) go run main.go`: quick ad-hoc run in development mode.
 
 ## Coding Style & Naming Conventions
 
-- Go 1.25; keep files `gofmt`-clean (tabs, trailing newline) and run `goimports` if you add imports.
-- Exported identifiers use CamelCase; prefer clear, imperative function names (e.g., `CreatePullRequest`, `Add`).
-- Keep package-scoped variables minimal; favor passing context explicitly as in existing functions.
-- YAML additions should use the helpers in `rule/` to preserve ordering and comments.
+- Go 1.25+, format with `gofmt` (tabs for Go per `.editorconfig`); LF line endings, final newline required.
+- Keep package names short and lower-case; exported identifiers use Go’s PascalCase; tests named `TestXxx`.
+- Branches typically use `add/<rule-id>` or similar imperative slugs; keep them short and descriptive.
+- Avoid committing generated secrets or tokens; prefer environment variables over config files.
 
 ## Testing Guidelines
 
-- Tests live alongside code in `*_test.go`; name tests `TestXxx_Subject` for clarity.
-- Prefer table-driven tests for permutations (see `rule/rule_test.go`); mock GitHub interactions via existing patterns in `github/` tests.
-- Run `go test ./...` before commits; add coverage when modifying request/response handling or YAML mutation logic.
+- Use Go’s standard testing package; follow table-driven patterns present in existing tests.
+- Name tests after the function under test (e.g., `TestAppendRule`); co-locate fixtures near the test file.
+- When adding behavior touching GitHub calls, prefer interface seams or fakes to avoid network reliance.
+- Aim to keep `make test` green; add regression tests alongside fixes.
 
 ## Commit & Pull Request Guidelines
 
-- Use concise, imperative commit subjects (history shows short action verbs like “Add new rule”; add context such as scope when possible).
-- PRs should state what changed, why, and how it was validated (commands run, env vars used). Link related issues and include screenshots only if UI output is affected (rare).
-- Ensure CI-like checks locally (`go fmt`, `go vet`, `go test ./...`) and note any required secrets or GitHub App settings in the description.
+- Commit messages: short, imperative summaries (examples in history: “Add new rule”, “fix”); include scope when helpful.
+- PRs: describe the change, note relevant env vars or assumptions, link issues if any, and call out test coverage.
+- Screenshots/log snippets are useful when altering automation behavior or YAML mutations.
+- Keep branches rebased onto `BASE_BRANCH`; clean up debugging output before opening the PR.
 
-## Security & Configuration Tips
+## Configuration & Security Notes
 
-- Never commit tokens or private keys; use `gh auth token` for local runs and environment variables for automation.
-- Limit repo/branch scope via `OWNER`, `REPOSITORY`, and `BASE_BRANCH` when testing; use disposable branches for experiments.
+- Required env vars: `ENVIRONMENT`, `OWNER`, `REPOSITORY`, `RULE_PATH`, `BASE_BRANCH`, and either `GITHUB_TOKEN` (dev) or GitHub App credentials (production).
+- Never commit tokens or private keys; load via shell env or secret stores.
+- Default rule target is `rule.yaml`; adjust `RULE_PATH` if you add additional rule files in other repos.
