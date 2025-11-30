@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v79/github"
+	"github.com/octo-sts/app/pkg/gcpkms"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 
@@ -20,7 +22,32 @@ type GitHub struct {
 }
 
 func NewClient(ctx context.Context, cfg *env.Env) (*GitHub, error) {
-	if cfg.Environment == env.EnvironmentProduction {
+	if cfg.GitHubAppKMSKeyPath != "" {
+		kmsClient, err := kms.NewKeyManagementClient(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kms client: %w", err)
+		}
+
+		signer, err := gcpkms.New(ctx, kmsClient, cfg.GitHubAppKMSKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kms signer: %w", err)
+		}
+
+		atr, err := ghinstallation.NewAppsTransportWithOptions(http.DefaultTransport, cfg.GitHubAppID, ghinstallation.WithSigner(signer))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ghinstallation transport: %w", err)
+		}
+
+		itr := ghinstallation.NewFromAppsTransport(atr, cfg.GitHubAppInstallationID)
+
+		itrClient := &http.Client{Transport: itr, Timeout: 5 * time.Second}
+		return &GitHub{
+			client:   github.NewClient(itrClient),
+			clientV4: githubv4.NewClient(itrClient),
+		}, nil
+	}
+
+	if cfg.GitHubAppPrivateKey != "" {
 		itr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, cfg.GitHubAppID, cfg.GitHubAppInstallationID, cfg.GitHubAppPrivateKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ghinstallation transport: %w", err)
@@ -32,16 +59,17 @@ func NewClient(ctx context.Context, cfg *env.Env) (*GitHub, error) {
 		}, nil
 	}
 
-	if cfg.GitHubToken == "" {
-		return nil, fmt.Errorf("GITHUB_TOKEN is required")
+	if cfg.GitHubToken != "" {
+		itrClient := oauth2.NewClient(
+			ctx, oauth2.StaticTokenSource(
+				&oauth2.Token{AccessToken: cfg.GitHubToken},
+			),
+		)
+		return &GitHub{
+			client:   github.NewClient(itrClient),
+			clientV4: githubv4.NewClient(itrClient),
+		}, nil
 	}
-	itrClient := oauth2.NewClient(
-		ctx, oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: cfg.GitHubToken},
-		),
-	)
-	return &GitHub{
-		client:   github.NewClient(itrClient),
-		clientV4: githubv4.NewClient(itrClient),
-	}, nil
+
+	return nil, fmt.Errorf("no GitHub authentication method provided")
 }
