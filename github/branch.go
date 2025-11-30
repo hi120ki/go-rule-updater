@@ -28,3 +28,17 @@ func (g *GitHub) CreateBranch(ctx context.Context, owner, repo, branchName, base
 
 	return nil
 }
+
+// UpdateBranchRef updates a branch reference to point to a new SHA (force update)
+func (g *GitHub) UpdateBranchRef(ctx context.Context, owner, repo, branchName, sha string, force bool) error {
+	ref := "heads/" + branchName
+	updateRef := github.UpdateRef{
+		SHA:   sha,
+		Force: &force,
+	}
+	_, _, err := g.client.Git.UpdateRef(ctx, owner, repo, ref, updateRef)
+	if err != nil {
+		return fmt.Errorf("failed to update branch %s to SHA %s: %w", branchName, sha, err)
+	}
+	return nil
+}

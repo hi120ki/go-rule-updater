@@ -40,3 +40,27 @@ func Add(yamlContent string, rule string) (string, error) {
 
 	return string(updatedYAML), nil
 }
+
+func GetAddedRules(old, new string) ([]string, error) {
+	var oldConfig, newConfig Config
+	if err := yaml.Unmarshal([]byte(old), &oldConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal old YAML: %w", err)
+	}
+	if err := yaml.Unmarshal([]byte(new), &newConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal new YAML: %w", err)
+	}
+
+	oldRules := make(map[string]struct{})
+	for _, item := range oldConfig.Config {
+		oldRules[item.Name] = struct{}{}
+	}
+
+	addedRules := []string{}
+	for _, item := range newConfig.Config {
+		if _, exists := oldRules[item.Name]; !exists {
+			addedRules = append(addedRules, item.Name)
+		}
+	}
+
+	return addedRules, nil
+}

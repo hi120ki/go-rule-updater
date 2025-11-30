@@ -108,12 +108,101 @@ func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
 		}
 
 		if s.gh.IsConflicting(fullPR) {
-			log.Printf("Updating conflicting PR #%d: %s", fullPR.GetNumber(), fullPR.GetTitle())
-			if err := s.gh.UpdatePullRequestBranch(ctx, s.cfg.Owner, s.cfg.Repository, fullPR.GetNumber()); err != nil {
-				log.Printf("Failed to update PR #%d: %v", fullPR.GetNumber(), err)
+			log.Printf("Resolving conflicts for PR #%d with rebase: %s", fullPR.GetNumber(), fullPR.GetTitle())
+
+			branchName := fullPR.Head.GetRef()
+
+			// Get PR commits to find the original base
+			commits, err := s.gh.ListPullRequestCommits(ctx, s.cfg.Owner, s.cfg.Repository, fullPR.GetNumber())
+			if err != nil {
+				log.Printf("Failed to get PR commits for PR #%d: %v", fullPR.GetNumber(), err)
 				continue
 			}
-			log.Printf("Successfully updated PR #%d", fullPR.GetNumber())
+
+			if len(commits) == 0 {
+				log.Printf("No commits found for PR #%d, skipping", fullPR.GetNumber())
+				continue
+			}
+
+			// Get the parent of the first commit (original base)
+			firstCommit := commits[0]
+			if len(firstCommit.Parents) == 0 {
+				log.Printf("First commit has no parent for PR #%d, skipping", fullPR.GetNumber())
+				continue
+			}
+			originalBaseSHA := firstCommit.Parents[0].GetSHA()
+
+			// Get rule file content from original base
+			originalBaseContent, err := s.gh.GetFile(ctx, s.cfg.Owner, s.cfg.Repository, s.cfg.RulePath, originalBaseSHA)
+			if err != nil {
+				log.Printf("Failed to get original base rule file for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Get rule file content from PR branch
+			prContent, err := s.gh.GetFile(ctx, s.cfg.Owner, s.cfg.Repository, s.cfg.RulePath, branchName)
+			if err != nil {
+				log.Printf("Failed to get PR rule file for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Get added rules from the diff
+			addedRules, err := rule.GetAddedRules(originalBaseContent, prContent)
+			if err != nil {
+				log.Printf("Failed to get added rules for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			if len(addedRules) == 0 {
+				log.Printf("No added rules found for PR #%d, skipping", fullPR.GetNumber())
+				continue
+			}
+
+			log.Printf("Found added rules for PR #%d: %v", fullPR.GetNumber(), addedRules)
+
+			// Get base branch latest SHA
+			baseSHA, err := s.gh.GetLatestCommitSHA(ctx, s.cfg.Owner, s.cfg.Repository, s.cfg.BaseBranch)
+			if err != nil {
+				log.Printf("Failed to get base branch SHA for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Reset PR branch to base branch
+			if err := s.gh.UpdateBranchRef(ctx, s.cfg.Owner, s.cfg.Repository, branchName, baseSHA, true); err != nil {
+				log.Printf("Failed to reset branch for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Get current rule file content (after reset)
+			content, err := s.gh.GetFile(ctx, s.cfg.Owner, s.cfg.Repository, s.cfg.RulePath, s.cfg.BaseBranch)
+			if err != nil {
+				log.Printf("Failed to get rule file for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			// Re-apply all added rules
+			for _, ruleID := range addedRules {
+				content, err = rule.Add(content, ruleID)
+				if err != nil {
+					log.Printf("Failed to re-apply rule %s for PR #%d: %v", ruleID, fullPR.GetNumber(), err)
+					continue
+				}
+			}
+
+			// Create new commit
+			if err := s.gh.CreateCommit(ctx, &ghclient.CreateCommitInput{
+				Owner:           s.cfg.Owner,
+				Repository:      s.cfg.Repository,
+				Branch:          branchName,
+				Message:         "Rebase: Add new rule",
+				Additions:       []*ghclient.FileAdditionInput{{Path: s.cfg.RulePath, Content: content}},
+				ExpectedHeadOid: baseSHA,
+			}); err != nil {
+				log.Printf("Failed to create rebased commit for PR #%d: %v", fullPR.GetNumber(), err)
+				continue
+			}
+
+			log.Printf("Successfully rebased PR #%d with rules: %v", fullPR.GetNumber(), addedRules)
 		}
 	}
 

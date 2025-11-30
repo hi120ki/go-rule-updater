@@ -5,6 +5,7 @@ go 1.25.4
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
 	github.com/google/go-github/v79 v79.0.0
+	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/octo-sts/app v0.5.3
 )
@@ -49,7 +50,6 @@ require (
 	cloud.google.com/go/kms v1.23.2
 	github.com/goccy/go-yaml v1.19.0
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/uuid v1.6.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	golang.org/x/oauth2 v0.33.0
