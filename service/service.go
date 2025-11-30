@@ -97,7 +97,7 @@ func (s *Service) Merge(ctx context.Context, prNumber int) error {
 	}
 }
 
-func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
+func (s *Service) UpdatePRs(ctx context.Context) error {
 	prs, err := s.gh.ListOpenPullRequests(ctx, s.cfg.Owner, s.cfg.Repository)
 	if err != nil {
 		return err
@@ -106,13 +106,12 @@ func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
 	for _, pr := range prs {
 		fullPR, err := s.gh.GetPullRequest(ctx, s.cfg.Owner, s.cfg.Repository, pr.GetNumber())
 		if err != nil {
-			log.Printf("Failed to get PR #%d: %v", pr.GetNumber(), err)
-			continue
+			return fmt.Errorf("failed to get PR #%d: %w", pr.GetNumber(), err)
 		}
 
 		if s.gh.IsConflicting(fullPR) && strings.HasPrefix(fullPR.Head.GetRef(), "add/") {
 			log.Printf("Resolving conflicts for PR #%d with rebase: %s", fullPR.GetNumber(), fullPR.GetTitle())
-			if err := s.updateConflictingPR(ctx, fullPR); err != nil {
+			if err := s.updateConflictingRulePR(ctx, fullPR); err != nil {
 				log.Printf("Failed to resolve conflicts for PR #%d: %v", fullPR.GetNumber(), err)
 				continue
 			}
@@ -122,7 +121,7 @@ func (s *Service) UpdateConflictingPRs(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) updateConflictingPR(ctx context.Context, input *github.PullRequest) error {
+func (s *Service) updateConflictingRulePR(ctx context.Context, input *github.PullRequest) error {
 	branchName := input.Head.GetRef()
 
 	// Get PR commits to find the original base

@@ -39,7 +39,7 @@ func main() {
 
 	time.Sleep(10 * time.Second)
 
-	if err := svc.UpdateConflictingPRs(ctx); err != nil {
+	if err := svc.UpdatePRs(ctx); err != nil {
 		log.Printf("Warning: Failed to update conflicting PRs: %v", err)
 	}
 }

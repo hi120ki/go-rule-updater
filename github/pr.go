@@ -57,16 +57,6 @@ func (g *GitHub) UpdatePullRequestBranch(ctx context.Context, owner, repo string
 	return err
 }
 
-// RebasePullRequestBranch updates the PR branch with rebase strategy
-func (g *GitHub) RebasePullRequestBranch(ctx context.Context, owner, repo string, number int, expectedHeadSHA string) error {
-	opts := &github.PullRequestBranchUpdateOptions{}
-	if expectedHeadSHA != "" {
-		opts.ExpectedHeadSHA = &expectedHeadSHA
-	}
-	_, _, err := g.client.PullRequests.UpdateBranch(ctx, owner, repo, number, opts)
-	return err
-}
-
 // IsConflicting checks if a PR has merge conflicts
 func (g *GitHub) IsConflicting(pr *github.PullRequest) bool {
 	return !pr.GetMergeable() && pr.GetMergeableState() == "dirty"
